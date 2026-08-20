@@ -60,6 +60,14 @@ const createAutomationSchema = z
     secondaryButtonLabel: z.string().max(20).optional().nullable(),
     isActive: z.boolean().optional().default(true),
     wholeWordMatch: z.boolean().optional().default(true),
+    // Phase 2: the agent answers replies to this campaign's DM.
+    agentEnabled: z.boolean().optional().default(false),
+    agentBrief: z.string().max(4000).optional().nullable(),
+    agentMaxTurns: z.number().int().min(1).max(50).optional().default(12),
+    agentBookingUrl: z
+      .union([z.string().url(), z.literal("")])
+      .optional()
+      .nullable(),
   })
   // A campaign must target a specific post, any post, or the next reel.
   .refine(
@@ -106,6 +114,13 @@ const updateAutomationSchema = z.object({
   publicReplyMessages: z.array(z.string().max(1000)).max(10).optional(),
   isActive: z.boolean().optional(),
   wholeWordMatch: z.boolean().optional(),
+  agentEnabled: z.boolean().optional(),
+  agentBrief: z.string().max(4000).optional().nullable(),
+  agentMaxTurns: z.number().int().min(1).max(50).optional(),
+  agentBookingUrl: z
+    .union([z.string().url(), z.literal("")])
+    .optional()
+    .nullable(),
   reportShareEnabled: z.boolean().optional(),
   // Empty string clears the tracked link; a URL updates/creates it; undefined
   // leaves it unchanged.
@@ -427,6 +442,10 @@ export async function POST(request: NextRequest) {
         : null,
       isActive: parsed.data.isActive,
       wholeWordMatch: parsed.data.wholeWordMatch,
+      agentEnabled: parsed.data.agentEnabled,
+      agentBrief: parsed.data.agentBrief?.trim() || null,
+      agentMaxTurns: parsed.data.agentMaxTurns,
+      agentBookingUrl: parsed.data.agentBookingUrl?.trim() || null,
       workspaceId,
       instagramAccountId: instagramAccount.id,
       reportShareSlug: generateReportShareSlug(),
@@ -534,6 +553,15 @@ export async function PATCH(request: NextRequest) {
   if (automationData.publicReplyEnabled === false) {
     automationData.publicReplyMessages = [];
     automationData.publicReplyMessage = null;
+  }
+  // An empty booking URL means "no booking link", which is what withholds the
+  // book_call tool from the agent — it must be null, not "".
+  if (automationData.agentBookingUrl !== undefined) {
+    automationData.agentBookingUrl =
+      automationData.agentBookingUrl?.trim() || null;
+  }
+  if (automationData.agentBrief !== undefined) {
+    automationData.agentBrief = automationData.agentBrief?.trim() || null;
   }
 
   const updated = await prisma.automation.update({

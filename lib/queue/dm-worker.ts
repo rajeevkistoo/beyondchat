@@ -26,6 +26,7 @@ import {
   sendPrivateReplyWithLinkButton,
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
+import { runAgentTurn } from "@/lib/agent/run";
 import { matchKeywords } from "@/lib/utils/keyword-matcher";
 import { reserveDMSlot } from "@/lib/utils/rate-limiter";
 import {
@@ -938,6 +939,17 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
 async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   const { instagramAccountId, messageId, messageText, senderId } = job.data;
 
+  // The agent gets first refusal on inbound DMs. It only ever answers people
+  // this account already DM'd (a reply to our own campaign message), so a cold
+  // inbound from a stranger still falls through to the keyword autoreply below.
+  const handledByAgent = await tryAgentReply({
+    instagramAccountId,
+    messageId,
+    messageText,
+    senderId,
+  });
+  if (handledByAgent) return;
+
   const automations = await prisma.automation.findMany({
     where: {
       dmTriggerEnabled: true,
@@ -1176,6 +1188,169 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
       throw error;
     }
   }
+}
+
+/**
+ * Answer an inbound DM with the agent, if this message belongs to a thread the
+ * agent owns. Returns true when it handled the message, so the caller skips the
+ * keyword autoreply — otherwise a reply saying "playbook" would trigger both the
+ * agent and the canned DM, and the visitor would get two messages at once.
+ *
+ * Eligibility is deliberately narrow. The agent answers a person only if this
+ * campaign has already sent them something (a DmLog row) or is already mid
+ * conversation with them. It never opens a conversation with a stranger.
+ */
+async function tryAgentReply(opts: {
+  instagramAccountId: string;
+  messageId: string;
+  messageText: string;
+  senderId: string;
+}): Promise<boolean> {
+  const { instagramAccountId, messageId, messageText, senderId } = opts;
+  if (!messageText.trim()) return false;
+  if (!process.env.ANTHROPIC_API_KEY) return false;
+
+  // An existing thread wins, whichever campaign owns it — the person is mid
+  // conversation and must not be handed to a different campaign's agent.
+  const existing = await prisma.agentConversation.findFirst({
+    where: {
+      contactId: senderId,
+      automation: {
+        agentEnabled: true,
+        isActive: true,
+        instagramAccount: { instagramId: instagramAccountId },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, status: true, automationId: true },
+  });
+
+  // A handed-off thread stays handed off. Re-engaging after telling someone a
+  // human would pick it up is the single worst thing this can do.
+  if (existing?.status === "HANDED_OFF" || existing?.status === "CLOSED") {
+    return true;
+  }
+
+  let conversationId = existing?.id ?? null;
+
+  if (!conversationId) {
+    // No thread yet: has any agent campaign on this account already messaged
+    // this person? That DmLog row is what makes them a reply rather than a
+    // cold inbound.
+    const priorLog = await prisma.dmLog.findFirst({
+      where: {
+        commenterId: senderId,
+        status: "SENT",
+        automation: {
+          agentEnabled: true,
+          isActive: true,
+          instagramAccount: { instagramId: instagramAccountId },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        automationId: true,
+        workspaceId: true,
+        commenterName: true,
+      },
+    });
+    if (!priorLog) return false;
+
+    const conversation = await prisma.agentConversation.upsert({
+      where: {
+        automationId_contactId: {
+          automationId: priorLog.automationId,
+          contactId: senderId,
+        },
+      },
+      create: {
+        workspaceId: priorLog.workspaceId,
+        automationId: priorLog.automationId,
+        contactId: senderId,
+        contactName: priorLog.commenterName,
+      },
+      update: {},
+      select: { id: true },
+    });
+    conversationId = conversation.id;
+  }
+
+  // Idempotency: a BullMQ retry must not re-answer a message already answered.
+  // The inbound text is stored as the first row of each turn, so a matching
+  // row means this message has already been through the loop.
+  const alreadyAnswered = await prisma.agentMessage.findFirst({
+    where: {
+      conversationId,
+      role: "user",
+      content: {
+        equals: [{ type: "text", text: messageText }] as never,
+      },
+    },
+    select: { id: true },
+  });
+  if (alreadyAnswered) return true;
+
+  const conversation = await prisma.agentConversation.findUniqueOrThrow({
+    where: { id: conversationId },
+    select: {
+      workspaceId: true,
+      automation: {
+        select: {
+          id: true,
+          instagramAccount: {
+            select: { instagramId: true, accessToken: true },
+          },
+        },
+      },
+    },
+  });
+
+  const encrypted = conversation.automation.instagramAccount.accessToken;
+  if (!encrypted) return false;
+  let accessToken: string;
+  try {
+    accessToken = decryptToken(encrypted);
+  } catch {
+    return false;
+  }
+
+  let result;
+  try {
+    result = await runAgentTurn({ conversationId, inboundText: messageText });
+  } catch (error) {
+    // The model or the API failed. Say nothing rather than something wrong, but
+    // make the silence visible — a quiet agent looks identical to a working one.
+    await prisma.operationalEvent
+      .create({
+        data: {
+          workspaceId: conversation.workspaceId,
+          source: "WORKER",
+          level: "ERROR",
+          message: `Agent turn failed: ${formatError(error)}`,
+          payload: { conversationId, senderId, messageId },
+        },
+      })
+      .catch(() => {});
+    throw error;
+  }
+
+  for (const text of result.outbox) {
+    await sendDirectMessage(
+      accessToken,
+      conversation.automation.instagramAccount.instagramId,
+      senderId,
+      text
+    );
+  }
+
+  if (result.outbox.length > 0) {
+    await prisma.agentMessage.updateMany({
+      where: { conversationId, role: "assistant" },
+      data: { sentToUser: true },
+    });
+  }
+
+  return true;
 }
 
 async function processJob(job: Job<DmQueueJob>): Promise<void> {

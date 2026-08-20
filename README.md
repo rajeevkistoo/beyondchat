@@ -1,115 +1,81 @@
-<div align="center">
+# BeyondChat
 
-# OpenReply
+Instagram comment-to-DM automation, plus an AI agent that answers the replies.
 
-Open-sourced ManyChat for Instagram comment-to-DM automation.
+Someone comments `PLAYBOOK` on your reel and gets a DM with your link about a second later. When they write back — because most tools stop dead at that point — a Claude agent picks up the conversation, answers from a brief you wrote, tags them, and hands them to you when it should.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/diwenne/openreply?style=flat&color=black)](https://github.com/diwenne/openreply/stargazers)
-[![Built with Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
-
-</div>
-
-Someone comments `LINK` on your reel, and they get a DM with your link a second later. That is the whole idea. OpenReply watches the comments on your Instagram posts, and when a comment matches a keyword you set, it sends that person a private reply through the official Meta API. You can also post a public reply under the comment at the same time.
-
-ManyChat does this and charges a monthly fee. OpenReply is the same core feature, free, running on your own infrastructure, with no seat limits and no plan caps.
-
-> If this saves you a subscription or a weekend of building, a star on the repo genuinely helps other people find it.
+**This is a fork.** The comment-to-DM engine is [diwenne/openreply](https://github.com/diwenne/openreply) (MIT), which is itself a fork of [im-anishraj/instagram-comment-to-dm](https://github.com/im-anishraj/instagram-comment-to-dm). I did not build that part. What I added is the agent loop and the ops layer described below.
 
 ## Why this exists
 
-Comment-to-DM is one feature, but every tool that offers it wants a recurring subscription for it. The actual work is a webhook, a keyword match, and one API call to Meta. That does not need to cost anything to run for a single account.
+I run a small business. I was paying for a tool to do one thing, and the thing it did stopped exactly where the actual conversation started — the DM goes out, the person replies, and nobody is there.
 
-OpenReply is built around Meta's official Instagram private replies. It does not scrape, it does not automate a browser, and it never asks for an Instagram password. That keeps your account inside Meta's rules, which matters if you care about not getting flagged.
+I am not a developer. I have never written a line of production code. I found an open-source project that already did the hard part, understood it, and made it do the part I needed. That took a weekend, not a quarter, which is the only reason it exists at all.
 
-## Features
+So this repo is less a product than a worked example: what "use AI as a co-founder rather than a tool" looks like when you actually ship the result.
 
-- Keyword to DM. Match one or many keywords per post, whole-word or partial.
-- Optional public reply. Post a visible comment reply on top of the DM.
-- Tracked links. Swap a link for a tracked redirect and see clicks and CTR per campaign.
-- Two link buttons. Send up to two tappable link buttons in one DM, each a separate tracked link with its own click stats.
-- Follow gate. Optionally require a follow before you hand over the link. The DM asks the commenter to follow and tap a button; on tap, OpenReply checks Meta's `is_user_follow_business` flag and only sends the link once they follow, re-prompting until then. It fails open (sends the link anyway) when Instagram does not return follow status, so a real follower is never trapped.
-- Personalization. Use `{username}` in your message to greet the commenter by name.
-- Per-account rate limiting. Stays under Meta's documented cap of 750 private replies per hour, and queues the overflow instead of dropping it.
-- Multiple Instagram accounts. Connect several professional accounts under one workspace, each with its own limits.
-- Workspaces and roles. Owner, admin, and member roles with invite links, useful if you run this for clients.
-- Campaign templates. Start from a preset instead of a blank form.
-- Inbox. Read your Instagram DM conversations and reply from the dashboard, inside Meta's 24-hour messaging window. Cached so it loads instantly on repeat visits.
-- DM logs. Every send, skip, and failure is logged with a reason.
-- Self-comment filtering. Your own comments never trigger a reply, since Meta rejects DMing yourself anyway.
+## What I added on top of OpenReply
 
-## How it works
+**The DM agent** (`lib/agent/`). A reply to a campaign DM gets answered by a Claude tool-calling loop instead of falling into a void.
 
-1. Someone comments on your Instagram post or reel.
-2. Meta sends a webhook to your OpenReply instance.
-3. OpenReply checks the comment against your active campaigns.
-4. On a keyword match, it queues a job.
-5. A background worker sends the private reply, and the public reply if you enabled one.
+- The loop can do exactly four things: `send_link`, `tag_contact`, `book_call`, `handoff_to_me`. That list is the entire blast radius — the model never touches Instagram or the database directly.
+- House rules in `systemPrompt()` override the brief you write, not the other way round. The first one is that the agent **qualifies, it never assesses**: it does not tell a stranger whether they qualify, quote a price, or give a verdict. It gathers and hands off.
+- Two independent stop conditions: a per-conversation turn ceiling and a per-turn tool-iteration ceiling. Hitting either hands off to a human rather than going quiet.
+- A handed-off thread is never auto-answered again.
+- Off by default, per campaign. Without an `ANTHROPIC_API_KEY` it declines silently and the plain keyword autoreply handles the message.
 
-The web app receives the webhook and serves the dashboard. A separate worker process does the sending, because the send has to survive rate limits and retries. Both talk to the same Postgres and Redis.
+**The ops layer** (`ops/`). This runs on a laptop, not a datacenter, so it has to survive reboots and sleep.
 
-## Quick start
+- `ensure-up.sh` — idempotent boot script and watchdog. Starts only what is missing, restarts the worker on a stale heartbeat, restarts the tunnel when the *public* URL stops answering. Run it from launchd or cron every few minutes.
+- `refresh-tokens.sh` — the daily jobs a serverless cron config would have run. This is what stops the Instagram token expiring silently at 60 days.
 
-You need a few free accounts before anything works: a Meta developer app, a Resend account for login emails, and somewhere to host (Vercel for the web app, Railway for the worker plus Postgres and Redis). The Instagram account you connect has to be a Business or Creator account, not a personal one.
+The failure both of these exist to prevent is silence. A dead worker still lets webhooks arrive and return 200, so Instagram sees success and the DM never sends. Nothing surfaces unless something is actively checking.
 
-The honest version: the code deploys in minutes, but the Meta app setup is the part that takes real time. Read [docs/setup.md](docs/setup.md) before you start. It is the single setup guide, covering hosting, your domain, the environment, and every Meta wrong turn so you do not have to find them yourself.
+## Four things that went wrong, which is the interesting part
 
-### Deploy the web app
+The build was a few hours of work and about the same again of being confidently misled. Every one of these looked like success:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/diwenne/openreply)
+1. **Meta returned `data: []` for the comments on every post**, with valid paging cursors, while `comments_count` said 3. Not a bug and not an empty post — an unpublished app has its comment data redacted, and redaction is indistinguishable from "no comments."
+2. **I diagnosed a missing webhook subscription** from `GET /{app-id}/subscriptions` returning empty. It was wrong. Instagram-Login apps register against the *Instagram* app ID, so that endpoint is a guaranteed false negative.
+3. **The watchdog launched a duplicate of every service, every five minutes.** `screen -ls | grep -q` under `set -o pipefail`: `screen -ls` exits 1 even on success, pipefail lets that status win, so the "is it running?" check always answered no.
+4. **Auto-start installed cleanly and did nothing.** macOS refuses launchd-spawned scripts any access to `~/Desktop`, and the error went only to the job's own stderr log. That is why the project cannot live in Desktop, Documents or Downloads.
 
-### Run it locally
+None of these threw an error where anyone would see one. That is the actual lesson of building this way: the tooling is good enough that the constraint is no longer *can you build it* — it is **will you know when it is wrong**.
+
+## Support
+
+**There is none.** This is my own instance, published because the story is worth telling, not because I am maintaining it for anyone. Issues are not monitored and pull requests are not reviewed.
+
+If you want the well-supported version of the comment-to-DM engine, go to [diwenne/openreply](https://github.com/diwenne/openreply) — it is actively maintained and the setup guide there is genuinely good.
+
+## Running it
+
+The engine's setup is unchanged from upstream, and the Meta app configuration is the part that takes real time. Read [docs/setup.md](docs/setup.md) first.
 
 ```bash
-git clone https://github.com/diwenne/openreply.git
-cd openreply
 npm install
-cp .env.example .env      # then fill in the values, see docs/setup.md
-docker-compose up -d      # starts Postgres and Redis
+cp .env.example .env      # fill it in, see docs/setup.md
+docker compose up -d      # Postgres and Redis
 npm run db:migrate
-npm run dev               # web app on http://localhost:3000
-npm run worker            # in a second terminal, this sends the DMs
+npm run dev               # web app + webhook receiver
+npm run worker            # second terminal — this is what sends the DMs
 ```
 
-Two processes, always. `npm run dev` serves the app and receives webhooks. `npm run worker` is what actually sends the messages. If comments come in and no DM ever arrives, the worker is the first thing to check.
+Two processes, always. If comments arrive and no DM does, check the worker first.
 
-Full environment variables and the production layout are in [docs/setup.md](docs/setup.md).
+For the agent, add `ANTHROPIC_API_KEY` to `.env` (`AGENT_MODEL` defaults to `claude-sonnet-5`), then turn it on per campaign under **"And if they reply"**.
 
-## Set it up with your AI assistant
+If you expose the dev server through a tunnel, set `DEV_TUNNEL_HOST` and `BEYONDCHAT_PUBLIC_URL` in `.env` — without the first, the page renders as a permanent loading skeleton.
 
-If you use Claude Code, Cursor, or a similar tool, the Meta setup is a lot faster with an assistant driving it. There is a ready-made prompt in the [Set it up with an AI assistant](docs/setup.md#set-it-up-with-an-ai-assistant) section of the setup guide. Paste it into your assistant inside a clone of this repo, hand over your keys as it asks, and it will walk you through connecting Instagram and going live.
+## Stack
 
-## Tech stack
-
-- Next.js 16 and React 19 for the web app and API routes
-- Prisma 7 with PostgreSQL
-- BullMQ on Redis for the send queue and the worker
-- Auth.js (NextAuth) with email magic links through Resend
-- Tailwind CSS for the interface
-- The official Instagram API with Instagram Login
-
-For the complete stack — application libraries, the two runtime processes, and the free services this runs on (Vercel, Neon, Redis Cloud, an Oracle Cloud always-free VM for the worker, Resend, Meta) — see [docs/stack.md](docs/stack.md).
-
-## Contributing
-
-Issues and pull requests are welcome. If you hit a Meta quirk that is not in the setup guide, a PR that documents it is worth as much as a code fix, because that is where everyone loses time.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+Next.js 16, React 19, Prisma 7 on Postgres, BullMQ on Redis, Auth.js magic links, Tailwind, the official Instagram API with Instagram Login, and the Anthropic Messages API for the agent. Full breakdown in [docs/stack.md](docs/stack.md).
 
 ## Credits
 
-Built and maintained by Diwen Huang.
+Comment-to-DM engine by [Diwen Huang](https://github.com/diwenne), originally by [Anish Raj](https://github.com/im-anishraj). Both MIT.
 
-- GitHub: [@diwenne](https://github.com/diwenne)
-- Website: [diwenhuang.ca](https://diwenhuang.ca)
-- X: [@diwenne](https://x.com/diwennee)
-- Instagram: [@devdiwen](https://instagram.com/devdiwen)
-
-OpenReply is a fork of [instagram-comment-to-dm](https://github.com/im-anishraj/instagram-comment-to-dm) by [Anish Raj](https://github.com/im-anishraj), also MIT licensed. The billing layer and plan caps were removed, and the setup was documented from scratch.
-
-## Star the repo
-
-If OpenReply is useful to you, star it. It is the simplest way to help the project reach the next person looking for a free way to do this.
+Agent loop and ops layer by [Rajeev Kistoo](https://rajeevkistoo.com).
 
 ## License
 

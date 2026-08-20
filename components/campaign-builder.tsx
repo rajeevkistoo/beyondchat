@@ -46,6 +46,10 @@ interface LoadedCampaign {
   followPromptMessage: string | null;
   followPromptButtonLabel: string | null;
   followUpEnabled: boolean;
+  agentEnabled?: boolean;
+  agentBrief?: string | null;
+  agentMaxTurns?: number;
+  agentBookingUrl?: string | null;
   followUpMessage: string | null;
   followUpDelayMinutes: number | null;
   publicReplyEnabled: boolean;
@@ -178,6 +182,10 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [followPromptButtonLabel, setFollowPromptButtonLabel] =
     useState("i'm following");
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
+  const [agentEnabled, setAgentEnabled] = useState(false);
+  const [agentBrief, setAgentBrief] = useState("");
+  const [agentMaxTurns, setAgentMaxTurns] = useState(12);
+  const [agentBookingUrl, setAgentBookingUrl] = useState("");
   const [followUpMessage, setFollowUpMessage] = useState("");
   const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(0);
 
@@ -286,6 +294,10 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           c.followPromptButtonLabel ?? "i'm following"
         );
         setFollowUpEnabled(c.followUpEnabled ?? false);
+        setAgentEnabled(c.agentEnabled ?? false);
+        setAgentBrief(c.agentBrief ?? "");
+        setAgentMaxTurns(c.agentMaxTurns ?? 12);
+        setAgentBookingUrl(c.agentBookingUrl ?? "");
         setFollowUpMessage(c.followUpMessage ?? "");
         setFollowUpDelayMinutes(c.followUpDelayMinutes ?? 0);
       })
@@ -386,14 +398,26 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   async function handleSubmit(activeValue: boolean) {
     setError(null);
 
-    if (!selectedAccountId) return setError("Connect an Instagram account first.");
+    // Report every unmet requirement at once. One-at-a-time early returns made
+    // a fixed field look like no progress: the next check often re-rendered a
+    // banner that read the same, so the button appeared to do nothing.
+    const problems: string[] = [];
+    if (!selectedAccountId) problems.push("Connect an Instagram account first.");
     if (triggerScope === "specific" && !postId)
-      return setError("Pick a post or reel to trigger the campaign.");
+      problems.push("Pick a post or reel to trigger the campaign.");
     if (matchMode === "specific" && keywords.length === 0)
-      return setError("Add at least one keyword, or switch to any word.");
-    if (!dmMessage.trim()) return setError("Add the DM with the link.");
+      problems.push("Add at least one keyword, or switch to any word.");
+    if (!dmMessage.trim())
+      problems.push('Add the DM with the link — the "a DM with a link" box under "And then, they will get".');
     if (openingDmEnabled && (!openingDmMessage.trim() || !openingDmButtonLabel.trim()))
-      return setError("Your opening DM needs a message and a button label.");
+      problems.push("Your opening DM needs a message and a button label.");
+
+    if (problems.length > 0) {
+      setError(problems.join("  •  "));
+      if (typeof window !== "undefined")
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     setSaving(true);
 
@@ -424,6 +448,10 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       followPromptButtonLabel: requireFollow
         ? followPromptButtonLabel.trim() || "i'm following"
         : "",
+      agentEnabled,
+      agentBrief: agentEnabled ? agentBrief.trim() : "",
+      agentMaxTurns,
+      agentBookingUrl: agentEnabled ? agentBookingUrl.trim() : "",
       followUpEnabled,
       followUpMessage: followUpEnabled ? followUpMessage.trim() : "",
       followUpDelayMinutes: followUpEnabled ? followUpDelayMinutes : 0,
@@ -974,6 +1002,87 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                     : "Sent right after they tap through."}
                   {" {username}"} personalizes it. Max 24 hours, to stay inside
                   Instagram&apos;s messaging window.
+                </p>
+              </div>
+            )}
+          </div>
+        </Section>
+
+        <Section title="And if they reply">
+          <div className="rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-foreground">
+                let the agent answer them
+              </span>
+              <Toggle
+                on={agentEnabled}
+                onToggle={() => setAgentEnabled(!agentEnabled)}
+              />
+            </div>
+            {!agentEnabled && (
+              <p className="mt-2 text-xs text-muted">
+                Off: a reply to your DM goes unanswered until you read it
+                yourself.
+              </p>
+            )}
+            {agentEnabled && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="text-xs text-muted">
+                    What is it there to do?
+                  </label>
+                  <textarea
+                    value={agentBrief}
+                    onChange={(e) => setAgentBrief(e.target.value)}
+                    placeholder="You're my first point of contact. Find out what kind of business they run, how big their team is, and what they're trying to automate. If they sound like a fit, get them on a call. Don't talk pricing."
+                    rows={5}
+                    className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                    maxLength={4000}
+                  />
+                  <p className="mt-1 text-xs text-muted">
+                    It always qualifies and hands off — it will never tell
+                    someone they qualify, quote a price you haven&apos;t given
+                    it, or claim to be human.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs text-muted">
+                    Booking link (optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={agentBookingUrl}
+                    onChange={(e) => setAgentBookingUrl(e.target.value)}
+                    placeholder="https://cal.com/you/intro"
+                    className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  />
+                  <p className="mt-1 text-xs text-muted">
+                    Leave empty and it cannot offer a call at all.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted">Hand over to me after</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={agentMaxTurns}
+                    onChange={(e) =>
+                      setAgentMaxTurns(
+                        Math.max(
+                          1,
+                          Math.min(50, Math.floor(Number(e.target.value) || 12))
+                        )
+                      )
+                    }
+                    className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+                  />
+                  <span className="text-xs text-muted">replies</span>
+                </div>
+                <p className="text-xs text-muted">
+                  It also hands over on its own if someone asks for a human,
+                  gets frustrated, or asks something it can&apos;t answer
+                  honestly. Once handed over it stays quiet.
                 </p>
               </div>
             )}

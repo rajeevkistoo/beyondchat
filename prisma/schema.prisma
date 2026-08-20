@@ -84,6 +84,7 @@ model Workspace {
   linkClicks        LinkClick[]
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
+  conversations     AgentConversation[]
 
   @@index([ownerId])
 }
@@ -203,6 +204,19 @@ model Automation {
   reportShareSlug    String? @unique
   reportShareEnabled Boolean @default(true)
 
+  /// When true, a reply to this campaign's DM is answered by the agent loop
+  /// instead of falling silent. The canned dmMessage still opens the
+  /// conversation — the agent only takes over from the visitor's first reply.
+  agentEnabled Boolean @default(false)
+  /// The brief: who the agent is, what it is trying to find out, what it must
+  /// never say. Appended to the non-negotiable house rules in lib/agent/run.ts.
+  agentBrief   String?
+  /// Hard ceiling on assistant turns per conversation. When it is hit the agent
+  /// hands off to a human rather than continuing to improvise.
+  agentMaxTurns Int @default(12)
+  /// Where book_call sends people. Without it the tool is not offered at all.
+  agentBookingUrl String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -211,6 +225,7 @@ model Automation {
   dmLogs           DmLog[]
   trackedLinks     TrackedLink[]
   linkClicks       LinkClick[]
+  conversations    AgentConversation[]
 
   @@index([workspaceId])
   @@index([instagramAccountId])
@@ -267,6 +282,69 @@ model ProcessedComment {
   seenAt             DateTime @default(now())
 
   @@index([instagramAccountId])
+}
+
+/// One ongoing DM thread between a campaign and one Instagram user. The agent
+/// is stateless per job, so this row IS its memory — without it every inbound
+/// message would be answered as if it were the first.
+model AgentConversation {
+  id           String @id @default(cuid())
+  workspaceId  String
+  automationId String
+  /// The visitor's IGSID. Scoped per automation, so two campaigns talking to
+  /// the same person keep separate threads.
+  contactId    String
+  contactName  String?
+
+  status AgentConversationStatus @default(ACTIVE)
+  /// Free-form labels the agent applied via tag_contact — how a thread is
+  /// triaged after the fact.
+  tags   String[] @default([])
+  /// Assistant turns spent. Compared against Automation.agentMaxTurns.
+  turns  Int      @default(0)
+
+  /// Set when the agent stopped and a human is expected to take over, with the
+  /// reason it gave. A handed-off thread is never auto-answered again.
+  handedOffAt     DateTime?
+  handoffReason   String?
+  /// Last inbound message time, for the 24-hour messaging window check.
+  lastInboundAt   DateTime  @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation Automation     @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  messages   AgentMessage[]
+
+  @@unique([automationId, contactId])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+/// One entry in a conversation's transcript, stored in Anthropic Messages API
+/// shape. `content` is the raw content block array (text, tool_use,
+/// tool_result), so a thread can be replayed into the API verbatim — flattening
+/// it to a string would break tool_use/tool_result pairing on the next turn.
+model AgentMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String // "user" | "assistant"
+  content        Json
+  /// Set on rows the agent actually sent to Instagram, for auditing what the
+  /// visitor really saw versus what was only internal tool traffic.
+  sentToUser     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+enum AgentConversationStatus {
+  ACTIVE
+  HANDED_OFF
+  CLOSED
 }
 
 model TrackedLink {

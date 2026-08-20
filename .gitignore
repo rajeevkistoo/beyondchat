@@ -43,3 +43,13 @@ next-env.d.ts
 
 /app/generated/prisma
 .gstack/
+
+# local tunnel credential
+.tunnel.env
+docker-compose.override.yml
+
+# Ops: rotating local logs and the watchdog lock.
+logs/
+
+# Personal ops runbook: contains this instance's hostnames and verify token.
+RUNBOOK.md
