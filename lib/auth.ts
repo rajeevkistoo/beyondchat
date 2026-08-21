@@ -12,17 +12,43 @@ const emailFrom = process.env.EMAIL_FROM ?? "OpenReply <login@example.com>";
 // self-hosters who do not want a third-party mail service. Resend stays the
 // default, so an existing deployment is unaffected.
 const smtpServer = process.env.EMAIL_SERVER;
+// With no mail transport configured at all, print the magic link to the server
+// log instead of failing. That is what lets a first run sign in with no Resend
+// account and no SMTP server — the single biggest prerequisite we can remove.
+const printLinkOnly = !smtpServer && !process.env.RESEND_API_KEY;
 
 /**
  * Provider id the login form has to sign in with. It differs per transport,
  * so it is derived here rather than hardcoded at the call site.
  */
-export const EMAIL_PROVIDER_ID = smtpServer ? "nodemailer" : "resend";
+export const EMAIL_PROVIDER_ID = smtpServer || printLinkOnly ? "nodemailer" : "resend";
 
 export const authConfig = {
   adapter: PrismaAdapter(prisma as unknown as AdapterPrismaClient),
   providers: [
-    smtpServer
+    printLinkOnly
+      ? Nodemailer({
+          // Never contacted: sendVerificationRequest is overridden below, so no
+          // connection is opened. The field is only here to satisfy the provider.
+          server: "smtp://localhost:1025",
+          from: emailFrom,
+          async sendVerificationRequest({ identifier, url }) {
+            console.log(
+              [
+                "",
+                "  ┌─────────────────────────────────────────────────────────",
+                `  │  Sign-in link for ${identifier}`,
+                "  │",
+                `  │  ${url}`,
+                "  │",
+                "  │  Paste it into your browser. It works once, then expires.",
+                "  └─────────────────────────────────────────────────────────",
+                "",
+              ].join("\n"),
+            );
+          },
+        })
+      : smtpServer
       ? Nodemailer({ server: smtpServer, from: emailFrom })
       : Resend({
           apiKey: process.env.RESEND_API_KEY ?? "missing-resend-api-key",

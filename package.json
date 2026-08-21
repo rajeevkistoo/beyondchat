@@ -13,7 +13,8 @@
     "worker": "tsx worker/dm-worker.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "shots": "bash scripts/capture-shots.sh"
+    "shots": "bash scripts/capture-shots.sh",
+    "setup": "node scripts/setup.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
