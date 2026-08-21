@@ -21,6 +21,13 @@ if [[ "$(uname)" != "Darwin" ]]; then
   exit 1
 fi
 
+if [[ ! -t 0 ]] && [[ ! -r /dev/tty ]]; then
+  echo "No terminal attached. This script captures your screen, so it only runs"
+  echo "somewhere you can see and frame each shot. Open a terminal and run:"
+  echo "  npm run shots"
+  exit 1
+fi
+
 mkdir -p "$OUT"
 
 bold=$'\033[1m'; dim=$'\033[2m'; amber=$'\033[33m'; green=$'\033[32m'; off=$'\033[0m'
@@ -71,7 +78,17 @@ for row in "${SHOTS[@]}"; do
   echo "  ${bold}Frame:${off} $what"
   [[ -n "$warn" ]] && echo "  ${amber}⚠ $warn${off}"
   printf "  Ready? "
-  read -r key </dev/tty
+  # Read from the terminal when there is one, so this still works if the
+  # script is piped. Unset on EOF would abort the run under `set -u`.
+  # A failed read means no human is answering. Quit rather than capture:
+  # an unframed screenshot of whatever happens to be on screen is exactly
+  # what must never reach the repo.
+  key=""
+  if [[ -r /dev/tty ]]; then
+    read -r key </dev/tty || { echo; echo "  No input — stopping."; break; }
+  else
+    read -r key || { echo; echo "  No input — stopping."; break; }
+  fi
 
   case "$key" in
     q|Q) echo "  Stopped. Run again to pick up where you left off."; break ;;
