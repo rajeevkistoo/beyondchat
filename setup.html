@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up BeyondChat</title>
+<style>
+/* Matches app/globals.css: plain and functional. No gradients, glow or animation. */
+:root {
+  --background: #ffffff;
+  --foreground: #18181b;
+  --surface: #f7f7f8;
+  --surface-hover: #efeff1;
+  --border: #e4e4e7;
+  --muted: #71717a;
+  --accent: #f97316;
+  --success: #16a34a;
+  --warning: #d97706;
+  --rk: #0d736d;
+  --rk-hover: #0b5f5a;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--background); color: var(--foreground);
+  font-family: var(--font-sans); line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 7.5rem; }
+
+header { margin-bottom: 1.5rem; }
+h1 { font-size: 1.6rem; font-weight: 600; margin: 0 0 .45rem; letter-spacing: -0.01em; }
+.lede { color: var(--muted); margin: 0 0 .9rem; font-size: .95rem; }
+
+.callout {
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: 8px; padding: .9rem 1.1rem; font-size: .9rem; margin: 0 0 1.5rem;
+}
+.callout strong { font-weight: 600; }
+.callout p { margin: 0 0 .5rem; }
+.callout p:last-child { margin: 0; }
+
+/* Progress */
+.progress { position: sticky; top: 0; background: var(--background); padding: .9rem 0 1rem; z-index: 5; border-bottom: 1px solid var(--border); margin-bottom: 1.75rem; }
+.progress-meta { display: flex; justify-content: space-between; align-items: baseline; font-size: .8rem; color: var(--muted); margin-bottom: .5rem; }
+#progress-label { font-weight: 500; color: var(--foreground); }
+.progress-count { font-variant-numeric: tabular-nums; }
+.track { height: 6px; background: var(--surface-hover); border-radius: 3px; overflow: hidden; }
+.bar { height: 100%; width: 0; background: var(--accent); border-radius: 3px; }
+.bar.done { background: var(--success); }
+
+/* Phases */
+.phase { margin-bottom: 1.5rem; }
+.phase-head { cursor: pointer; user-select: none; }
+.phase-head:hover h2 { color: var(--accent); }
+.phase-status { flex: 0 0 auto; font-size: .78rem; color: var(--muted); margin-left: auto; }
+/* Only the phase you are in shows its steps. Seeing all nineteen at once is
+   what makes a setup guide feel impossible before you have started. */
+.phase[data-state="upcoming"] .phase-note,
+.phase[data-state="upcoming"] .step,
+.phase[data-state="done"] .phase-note,
+.phase[data-state="done"] .step { display: none; }
+.phase[data-state="upcoming"] { opacity: .5; margin-bottom: .55rem; }
+.phase[data-state="done"] { margin-bottom: .55rem; }
+.phase[data-state="done"] .phase-status { color: var(--success); }
+.phase[data-expanded="true"] .phase-note,
+.phase[data-expanded="true"] .step { display: block; }
+.phase[data-expanded="true"] { opacity: 1; }
+.phase-head { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 .2rem; }
+.phase-head h2 { font-size: 1.05rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.phase-time { font-size: .78rem; color: var(--muted); }
+.phase-note { font-size: .87rem; color: var(--muted); margin: 0 0 .85rem; }
+.phase[data-done="true"] .phase-head h2 { color: var(--muted); }
+
+/* Steps */
+.step { border: 1px solid var(--border); border-radius: 8px; margin-bottom: .6rem; }
+.step[data-done="true"] { background: var(--surface); }
+.step-head {
+  display: flex; align-items: center; gap: .75rem; width: 100%;
+  padding: .85rem 1rem; background: none; border: 0; font: inherit; color: inherit;
+  text-align: left; cursor: pointer; border-radius: 8px;
+}
+.step-head:hover { background: var(--surface-hover); }
+.box {
+  flex: 0 0 auto; width: 1.35rem; height: 1.35rem; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--background);
+  display: grid; place-items: center; font-size: .8rem; color: transparent;
+}
+.step[data-done="true"] .box { background: var(--success); border-color: var(--success); color: #fff; }
+.step-title { flex: 1 1 auto; font-weight: 500; font-size: .95rem; }
+.step[data-done="true"] .step-title { color: var(--muted); text-decoration: line-through; }
+.chev { flex: 0 0 auto; color: var(--muted); font-size: .7rem; }
+
+.step-body { display: none; padding: 0 1rem 1rem 3.1rem; }
+.step[data-open="true"] .step-body { display: block; }
+.step-body p { margin: 0 0 .7rem; font-size: .91rem; }
+.step-body ol, .step-body ul { margin: 0 0 .8rem; padding-left: 1.15rem; font-size: .91rem; }
+.step-body li { margin-bottom: .3rem; }
+a { color: var(--accent); }
+
+code { font-family: var(--font-mono); font-size: .85em; background: var(--surface-hover); padding: .1rem .35rem; border-radius: 4px; }
+pre {
+  position: relative; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; margin: 0 0 .8rem;
+}
+pre code { background: none; padding: 0; font-size: .82rem; line-height: 1.55; }
+.copy {
+  position: absolute; top: .45rem; right: .45rem;
+  border: 1px solid var(--border); background: var(--background); color: var(--muted);
+  border-radius: 4px; padding: .15rem .45rem; font: inherit; font-size: .72rem; cursor: pointer;
+}
+.copy:hover { background: var(--surface-hover); color: var(--foreground); }
+
+.trap {
+  border-left: 2px solid var(--warning); padding: .1rem 0 .1rem .8rem;
+  font-size: .87rem; color: var(--muted); margin: 0 0 .8rem;
+}
+.trap strong { color: var(--foreground); font-weight: 600; }
+
+figure { margin: 0 0 .85rem; }
+figure img { display: block; max-width: 100%; border: 1px solid var(--border); border-radius: 6px; }
+figcaption { font-size: .78rem; color: var(--muted); margin-top: .35rem; }
+
+.tick {
+  display: inline-flex; align-items: center; gap: .5rem;
+  border: 1px solid var(--border); background: var(--background);
+  border-radius: 6px; padding: .42rem .8rem; font: inherit; font-size: .86rem; cursor: pointer;
+}
+.tick:hover { background: var(--surface-hover); }
+.step[data-done="true"] .tick { border-color: var(--success); color: var(--success); }
+
+.shot { cursor: zoom-in; }
+.shot img { transition: none; }
+#lightbox {
+  display: none; position: fixed; inset: 0; z-index: 50;
+  background: rgba(24,24,27,.88); padding: 2rem; cursor: zoom-out;
+}
+#lightbox.on { display: grid; place-items: center; }
+#lightbox img { max-width: 100%; max-height: 90vh; border-radius: 6px; background: #fff; }
+
+.facts { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 0 0 1.5rem; font-size: .87rem; }
+.fact { color: var(--muted); }
+.fact b { display: block; color: var(--foreground); font-weight: 600; font-size: 1.05rem; line-height: 1.3; }
+
+.done-panel {
+  display: none; border: 1px solid var(--success); border-radius: 8px;
+  background: #f0fdf4; padding: 1.3rem 1.4rem; margin-bottom: 1.5rem;
+}
+.done-panel.on { display: block; }
+.done-panel h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .5rem; }
+.done-panel p { margin: 0 0 .7rem; font-size: .91rem; }
+.done-panel ul { margin: 0; padding-left: 1.15rem; font-size: .91rem; }
+
+/* Persistent CTA. Slim, always in view, never covering the tick buttons —
+   the wrap has bottom padding to match. */
+.cta-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: var(--rk); color: #fff;
+  border-top: 1px solid rgba(255,255,255,.15);
+}
+.cta-bar-inner {
+  max-width: 46rem; margin: 0 auto; padding: .6rem 1.25rem;
+  display: flex; align-items: center; gap: .9rem; flex-wrap: wrap;
+}
+.cta-bar p { margin: 0; font-size: .87rem; flex: 1 1 auto; min-width: 12rem; }
+.cta-bar a.cta-link {
+  color: #fff; text-decoration: none; font-weight: 600;
+  border: 1px solid rgba(255,255,255,.45); border-radius: 5px;
+  padding: .3rem .7rem; font-size: .84rem; white-space: nowrap;
+}
+.cta-bar a.cta-link:hover { background: rgba(255,255,255,.14); }
+.cta-bar .cta-alt { color: rgba(255,255,255,.82); font-size: .82rem; text-decoration: underline; white-space: nowrap; }
+@media (max-width: 32rem) { .cta-bar p { font-size: .82rem; } }
+
+.brand { display: block; margin-bottom: 1.75rem; }
+.brand img { display: block; width: auto; height: 26px; }
+
+.dfy {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); padding: 1.3rem 1.4rem; margin-top: 2.5rem;
+}
+.dfy h2 { font-size: 1.02rem; font-weight: 600; margin: 0 0 .5rem; color: var(--foreground); }
+.dfy p { margin: 0 0 .9rem; font-size: .91rem; color: var(--muted); }
+.dfy-actions { display: flex; flex-wrap: wrap; gap: .55rem; margin-bottom: .9rem; }
+.btn {
+  display: inline-block; border-radius: 6px; padding: .5rem .95rem;
+  font-size: .89rem; font-weight: 500; text-decoration: none; border: 1px solid var(--border);
+}
+.btn-primary { background: var(--rk); border-color: var(--rk); color: #fff; }
+.btn-primary:hover { background: var(--rk-hover); border-color: var(--rk-hover); }
+.btn-secondary { background: var(--background); color: var(--foreground); }
+.btn-secondary:hover { background: var(--surface-hover); }
+.dfy-sig { font-size: .84rem; color: var(--muted); margin: 0; }
+.dfy-sig a { color: var(--muted); }
+
+footer { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: .88rem; color: var(--muted); }
+footer h2 { font-size: .98rem; font-weight: 600; color: var(--foreground); margin: 0 0 .6rem; }
+footer p { margin: 0 0 .7rem; }
+.reset { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<a class="brand" href="https://rajeevkistoo.com" target="_blank" rel="noopener">
+  <img src="data:image/png;base64,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" alt="Rajeev Kistoo" width="900" height="176">
+</a>
+
+<header>
+  <h1>Set up BeyondChat</h1>
+  <p class="lede">Someone comments a keyword on your Instagram post, and they get a DM with your link a second later. This gets that running on your own domain, under your own Meta app.</p>
+</header>
+
+<div class="facts">
+  <span class="fact"><b>~2 hours</b>of actual work</span>
+  <span class="fact"><b>+ a wait</b>domain changes take 10 min&ndash;a few hours</span>
+  <span class="fact"><b>~$10/year</b>the domain. Everything else is free</span>
+</div>
+
+<div class="callout">
+  <p><strong>Do this with Claude open. Don't do it alone.</strong> Every command below, Claude runs for you &mdash; you only handle the parts that happen in a browser, where it can't click for you.</p>
+  <p>If you don't already have it set up: install <a href="https://code.visualstudio.com/" target="_blank" rel="noopener">VS Code</a>, add the <strong>Claude Code</strong> extension, and open this folder in it. Step 2 below walks you through it.</p>
+  <p>Then paste this to Claude:</p>
+  <pre><code>Read README.md and docs/setup.md, then walk me through setup.html
+one step at a time. Stop and ask me whenever you need a value from me
+or something only I can do in a browser.</code><button class="copy" type="button">Copy</button></pre>
+  <p>After that, talk to it normally. "It says port already in use" is a perfectly good thing to type.</p>
+</div>
+
+<div class="progress">
+  <div class="progress-meta">
+    <span id="progress-label">Not started</span>
+    <span class="progress-count"><span id="done-count">0</span> of <span id="total-count">0</span></span>
+  </div>
+  <div class="track"><div class="bar" id="bar"></div></div>
+</div>
+
+<div class="done-panel" id="done-panel">
+  <h2>That's it — it's live 🎉</h2>
+  <p>Someone comments your keyword, they get your DM. You built that.</p>
+  <ul>
+    <li>Both terminals need to stay running, and the machine needs to stay awake</li>
+    <li>Instagram's access expires after <strong>60 days</strong> unless it's refreshed — ask Claude to set up the daily refresh job, or it will quietly stop working in two months</li>
+    <li>Check <strong>DM Logs</strong> in the app any time to see what's been sent</li>
+  </ul>
+</div>
+
+<div id="phases">
+
+<!-- ─────────────── PHASE 1 ─────────────── -->
+<section class="phase">
+  <div class="phase-head"><h2>1. Before you start</h2><span class="phase-time">~10 min</span><span class="phase-status"></span></div>
+  <p class="phase-note">Three things you need to have. Get these wrong and you'll hit a wall three hours from now.</p>
+
+  <section class="step" data-step="p1-download" data-open="true">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Download the project &mdash; and move it</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <ol>
+        <li>Open the project page on GitHub</li>
+        <li>Green <strong>Code</strong> button → <strong>Download ZIP</strong></li>
+        <li>Unzip it</li>
+        <li><strong>Move the unzipped folder to your home folder</strong> &mdash; the one with your name on it</li>
+      </ol>
+      <p class="trap"><strong>Step 4 is not optional on a Mac.</strong> Your browser saves to Downloads, and macOS blocks background tasks from running there. Leave it in Downloads and this will half-work in a way that takes hours to diagnose. Same for Desktop and Documents.</p>
+      <button class="tick" type="button">Folder downloaded and moved</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p1-domain">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">A domain name you own</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Meta will only send data to an <code>https://</code> address, so you need a domain. Any registrar works — around $10 a year.</p>
+      <p>You'll point a subdomain at this later, something like <code>dm.yourdomain.com</code>. It doesn't affect your main website.</p>
+      <p class="trap"><strong>Already have a domain with a live website?</strong> Perfect — you'll add a subdomain and nothing about the existing site changes.</p>
+      <button class="tick" type="button">I have a domain</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p1-ig">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">An Instagram Business or Creator account</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>A personal account cannot be used. Switching is free and takes a minute:</p>
+      <ol>
+        <li>Instagram app → your profile → <strong>Settings</strong></li>
+        <li><strong>Account type and tools</strong> → <strong>Switch to professional account</strong></li>
+        <li>Pick Business or Creator — either is fine</li>
+      </ol>
+      <p class="trap"><strong>You also need a Facebook account.</strong> Meta's developer tools sit behind one, even though none of this touches your Facebook page. If you don't have one, make it now &mdash; it's free and takes two minutes.</p>
+      <p class="trap"><strong>And you need posts.</strong> A campaign attaches to a specific post, so an account with nothing on it has nothing to test with.</p>
+      <button class="tick" type="button">My account is Business or Creator</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p1-claude">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">VS Code, with Claude in it</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>You almost certainly already have a Claude account. What you need is somewhere for it to work &mdash; and for this, that's VS Code. It puts your files, a terminal and Claude in one window, so you're never hunting for anything.</p>
+      <ol>
+        <li>Download <a href="https://code.visualstudio.com/" target="_blank" rel="noopener">VS Code</a> &mdash; free, Mac and Windows</li>
+        <li>Open it, click <strong>Extensions</strong> in the left bar (the four-squares icon)</li>
+        <li>Search <strong>Claude Code</strong> and install it</li>
+        <li>Sign in with the Claude account you already have</li>
+        <li><strong>File → Open Folder</strong> and choose the folder you just moved</li>
+      </ol>
+      <figure class="shot">
+        <img src="docs/img/vscode-claude.png" alt="Claude Code running inside VS Code" onerror="this.closest('figure').remove()">
+        <figcaption>VS Code with the Claude Code extension &mdash; files on the left, Claude on the right</figcaption>
+      </figure>
+      <p class="trap"><strong>You do not need to understand the commands.</strong> You do need to read what Claude tells you and answer it honestly &mdash; especially when it asks whether something worked. Saying "yes" when you're not sure is how people lose an afternoon here.</p>
+      <button class="tick" type="button">VS Code is open on the folder</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p1-machine">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">A computer that stays on</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>This runs on a machine you control. While that machine is asleep or shut down, comments still arrive at Instagram but no DM goes out — and nobody tells you.</p>
+      <p>For testing, your laptop is fine. If you end up relying on it, move it to a small always-on server later.</p>
+      <p class="trap"><strong>Mac users:</strong> don't put this folder in <strong>Desktop, Documents or Downloads</strong>. macOS blocks background tasks from those folders, and it fails silently. Your home folder is fine.</p>
+      <p class="trap"><strong>You'll need a second Instagram account to test with</strong> &mdash; your own comments are ignored on purpose. A personal account works fine, or borrow a friend's phone for thirty seconds.</p>
+      <button class="tick" type="button">Got it</button>
+    </div>
+  </section>
+</section>
+
+<!-- ─────────────── PHASE 2 ─────────────── -->
+<section class="phase">
+  <div class="phase-head"><h2>2. Get it running on your machine</h2><span class="phase-time">~20 min</span><span class="phase-status"></span></div>
+  <p class="phase-note">Claude does all of this. Mostly you're just waiting for downloads to finish.</p>
+
+  <section class="step" data-step="p2-tools">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Install Docker and Node</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Two free installers. Docker runs the database; Node runs the app.</p>
+      <ul>
+        <li><a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a> — install it, then <strong>open it</strong> and leave it running</li>
+        <li><a href="https://nodejs.org/">Node.js</a> — take the LTS version</li>
+      </ul>
+      <p class="trap"><strong>Docker must actually be open</strong>, not just installed. If the whale icon isn't in your menu bar or system tray, nothing in the next step will work.</p>
+      <figure class="shot">
+        <img src="docs/img/docker-running.png" alt="Docker Desktop, running. The whale icon in your menu bar means it's on." onerror="this.closest('figure').remove()">
+        <figcaption>Docker Desktop, running. The whale icon in your menu bar means it's on.</figcaption>
+      </figure>
+      <button class="tick" type="button">Both installed, Docker is open</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p2-setup">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Run the setup</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>In the project folder:</p>
+      <pre><code>npm install
+npm run setup</code><button class="copy" type="button">Copy</button></pre>
+      <p>That starts the database, creates the tables, and generates your secret keys. You don't need to know what any of them are.</p>
+      <button class="tick" type="button">Setup finished without errors</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p2-run">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Start it up</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Two things have to run at the same time, in two separate terminal windows:</p>
+      <pre><code>npm run dev</code><button class="copy" type="button">Copy</button></pre>
+      <pre><code>npm run worker</code><button class="copy" type="button">Copy</button></pre>
+      <p>Then open <a href="http://localhost:3000">localhost:3000</a>. You should see the app.</p>
+      <p class="trap"><strong>The second one is the one everybody forgets.</strong> Without the worker, comments get received and no DM is ever sent — and the app looks completely fine.</p>
+      <button class="tick" type="button">The app loads in my browser</button>
+    </div>
+  </section>
+</section>
+
+<!-- ─────────────── PHASE 3 ─────────────── -->
+<section class="phase">
+  <div class="phase-head"><h2>3. Put it on your domain</h2><span class="phase-time">~30 min, plus waiting</span><span class="phase-status"></span></div>
+  <p class="phase-note">Right now it only exists on your machine. Meta needs to be able to reach it from the internet.</p>
+
+  <section class="step" data-step="p3-cf">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Add your domain to Cloudflare</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Free account. Cloudflare gives you a secure public address without opening anything on your home network.</p>
+      <ol>
+        <li>Sign up at <a href="https://dash.cloudflare.com/sign-up">cloudflare.com</a></li>
+        <li>Add your domain</li>
+        <li>Cloudflare gives you two nameservers — set those at your registrar, where you bought the domain</li>
+      </ol>
+      <p class="trap"><strong>This is the slow bit.</strong> Nameserver changes can take anywhere from ten minutes to a few hours. Start it, then go and do Phase 4 while you wait — the two don't depend on each other until the very end.</p>
+      <figure class="shot">
+        <img src="docs/img/cf-nameservers.png" alt="Cloudflare shows you two nameservers — these go at your registrar" onerror="this.closest('figure').remove()">
+        <figcaption>Cloudflare shows you two nameservers — these go at your registrar</figcaption>
+      </figure>
+      <button class="tick" type="button">Cloudflare says my domain is active</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p3-tunnel">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Create the tunnel</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>In Cloudflare: <strong>Zero Trust → Networks → Tunnels → Create a tunnel</strong>.</p>
+      <ol>
+        <li>Name it anything</li>
+        <li>Copy the install command it shows you — Claude can run it</li>
+        <li>Add a public hostname: subdomain <code>dm</code>, your domain, service <code>http://localhost:3000</code></li>
+      </ol>
+      <p>Then visit <code>https://dm.yourdomain.com</code>. You should see the same app you saw on localhost.</p>
+      <p class="trap"><strong>Write your full address down now</strong> — <code>https://dm.yourdomain.com</code>. You'll paste it into Meta four separate times in the next phase, and it has to match exactly every time. No trailing slash.</p>
+      <figure class="shot">
+        <img src="docs/img/cf-tunnel-hostname.png" alt="Adding the public hostname: subdomain dm, your domain, service http://localhost:3000" onerror="this.closest('figure').remove()">
+        <figcaption>Adding the public hostname: subdomain dm, your domain, service http://localhost:3000</figcaption>
+      </figure>
+      <button class="tick" type="button">My domain shows the app</button>
+    </div>
+  </section>
+</section>
+
+<!-- ─────────────── PHASE 4 ─────────────── -->
+<section class="phase">
+  <div class="phase-head"><h2>4. Create your Meta app</h2><span class="phase-time">~45 min</span><span class="phase-status"></span></div>
+  <p class="phase-note">The longest phase, and all of it happens in a browser. Nothing here is difficult — there's just a lot of it, and Meta hides things in odd places. Go slowly.</p>
+
+  <section class="step" data-step="p4-create">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Create the app</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Go to <a href="https://developers.facebook.com/apps">developers.facebook.com/apps</a> and create a new app.</p>
+      <ul>
+        <li>Use case: the <strong>Instagram</strong> one</li>
+        <li>Give it any name — this is yours</li>
+      </ul>
+      <figure class="shot">
+        <img src="docs/img/meta-create-app.png" alt="Choose the Instagram use case when Meta asks what your app does" onerror="this.closest('figure').remove()">
+        <figcaption>Choose the Instagram use case when Meta asks what your app does</figcaption>
+      </figure>
+      <button class="tick" type="button">App created</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p4-secrets">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Copy the three secrets into your app</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>You need the Instagram app ID, the Instagram app secret, and the Facebook app secret. Claude will tell you exactly where each one goes in your <code>.env</code> file.</p>
+      <p class="trap"><strong>Don't screenshot this page.</strong> These are passwords to your app. Copy and paste them; never post the screen anywhere, including into a chat.</p>
+      <button class="tick" type="button">All three are in my .env</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p4-oauth">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Register the login redirect</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Under the Instagram use case settings, add this as the OAuth redirect URI:</p>
+      <pre><code>https://dm.yourdomain.com/api/instagram/callback</code><button class="copy" type="button">Copy</button></pre>
+      <p class="trap"><strong>No trailing slash.</strong> One extra <code>/</code> and Instagram refuses to log you in, with an error that doesn't mention the slash.</p>
+      <figure class="shot">
+        <img src="docs/img/meta-oauth-redirect.png" alt="Where the OAuth redirect URI goes in the Instagram use case settings" onerror="this.closest('figure').remove()">
+        <figcaption>Where the OAuth redirect URI goes in the Instagram use case settings</figcaption>
+      </figure>
+      <button class="tick" type="button">Redirect saved</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p4-webhook">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Set up the webhook</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>This is how Instagram tells your app that someone commented. In the Instagram use case → <strong>Customize</strong> → <strong>Configure webhooks</strong>:</p>
+      <ul>
+        <li>Callback URL: <code>https://dm.yourdomain.com/api/webhook</code></li>
+        <li>Verify token: the <code>WEBHOOK_VERIFY_TOKEN</code> from your <code>.env</code></li>
+        <li>Subscribe to the <strong>comments</strong> field, and <strong>messages</strong> if you want replies handled too</li>
+      </ul>
+      <p>Your app must be running when you click Verify — Meta calls your address immediately to check it's real.</p>
+      <figure class="shot">
+        <img src="docs/img/meta-webhook-config.png" alt="Instagram use case → Customize → Configure webhooks" onerror="this.closest('figure').remove()">
+        <figcaption>Instagram use case → Customize → Configure webhooks</figcaption>
+      </figure>
+      <button class="tick" type="button">Meta accepted the webhook</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p4-tester">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Add yourself as a tester, and accept it</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Two halves, and almost everyone does only the first.</p>
+      <ol>
+        <li><strong>In Meta:</strong> App roles → Roles → Instagram testers → invite your Instagram username</li>
+        <li><strong>In Instagram, on your phone:</strong> Edit profile → Apps and websites → Tester invites → <strong>Accept</strong></li>
+      </ol>
+      <figure class="shot">
+        <img src="docs/img/ig-tester-invite.png" alt="Tester invites screen in Instagram" onerror="this.closest('figure').remove()">
+        <figcaption>Instagram → Edit profile → Apps and websites → Tester invites</figcaption>
+      </figure>
+      <p class="trap"><strong>If you skip the accept, everything still looks fine</strong> — you'll log in successfully and get a valid token, and then every single request fails with <code>Unsupported request</code>. Nothing in that message hints at the invite.</p>
+      <figure class="shot">
+        <img src="docs/img/meta-tester-invite.png" alt="Meta side: App roles → Roles → Instagram testers" onerror="this.closest('figure').remove()">
+        <figcaption>Meta side: App roles → Roles → Instagram testers</figcaption>
+      </figure>
+      <button class="tick" type="button">Invited and accepted</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p4-publish">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Publish the app</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Find <strong>Publish</strong> in the left-hand menu. Meta asks for three policy pages — your app already serves all three:</p>
+      <ul>
+        <li><code>https://dm.yourdomain.com/privacy</code></li>
+        <li><code>https://dm.yourdomain.com/terms</code></li>
+        <li><code>https://dm.yourdomain.com/data-deletion</code></li>
+      </ul>
+      <p class="trap"><strong>Do not skip this and assume you'll come back to it.</strong> An unpublished app hands back an empty list of comments on every post — no error, no warning, just nothing. It looks exactly like "nobody has commented," and it is the single biggest time-waster in this whole setup.</p>
+      <figure class="shot">
+        <img src="docs/img/meta-publish.png" alt="Publish sits in the left-hand menu, not on the main dashboard" onerror="this.closest('figure').remove()">
+        <figcaption>Publish sits in the left-hand menu, not on the main dashboard</figcaption>
+      </figure>
+      <button class="tick" type="button">App is published</button>
+    </div>
+  </section>
+</section>
+
+<!-- ─────────────── PHASE 5 ─────────────── -->
+<section class="phase">
+  <div class="phase-head"><h2>5. Connect it and prove it works</h2><span class="phase-time">~10 min</span><span class="phase-status"></span></div>
+  <p class="phase-note">The part you've been waiting for.</p>
+
+  <section class="step" data-step="p5-connect">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Log in and connect Instagram</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Go to <code>https://dm.yourdomain.com</code>, sign in with your email, then <strong>Settings → Connect Instagram</strong>.</p>
+      <p>You should reach Instagram's approval screen. Approve everything it asks for.</p>
+      <p class="trap"><strong>Seeing "Insufficient Developer Role"?</strong> The tester invite wasn't accepted. Back to that step.</p>
+      <figure class="shot">
+        <img src="docs/img/app-connect-instagram.png" alt="Settings → Connect Instagram, then Instagram's approval screen" onerror="this.closest('figure').remove()">
+        <figcaption>Settings → Connect Instagram, then Instagram's approval screen</figcaption>
+      </figure>
+      <button class="tick" type="button">My account is connected</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p5-campaign">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Create your first campaign</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <ol>
+        <li>Campaigns → New campaign</li>
+        <li>Pick one of your posts</li>
+        <li>Keyword: <code>TEST</code></li>
+        <li>Write the DM they'll receive</li>
+        <li>Turn it on</li>
+      </ol>
+      <button class="tick" type="button">Campaign is live</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p5-test">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Test it for real</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>From a <strong>different</strong> Instagram account, comment <code>TEST</code> on that post. Wait a few seconds.</p>
+      <p class="trap"><strong>It must be a different account.</strong> Your own comments are ignored on purpose — Meta doesn't allow DMing yourself, so testing from your own account always looks broken even when everything is right.</p>
+      <p>Nothing arrived? Open <strong>DM Logs</strong> in the app. Every send, skip and failure is listed there with the reason.</p>
+      <figure class="shot">
+        <img src="docs/img/dm-received.png" alt="What success looks like: the comment, and the DM that follows it" onerror="this.closest('figure').remove()">
+        <figcaption>What success looks like: the comment, and the DM that follows it</figcaption>
+      </figure>
+      <button class="tick" type="button">I got the DM 🎉</button>
+    </div>
+  </section>
+</section>
+
+</div>
+
+<section class="phase" data-state="upcoming" id="restart-phase">
+  <div class="phase-head"><h2>Coming back to it later</h2><span class="phase-time">2 min</span><span class="phase-status"></span></div>
+  <p class="phase-note">This takes a couple of hours and you will close your laptop in the middle of it. Here's how to pick it back up.</p>
+  <section class="step" data-open="true">
+    <div class="step-body" style="display:block;padding-left:1rem">
+      <p>Nothing is lost — your settings, campaigns and progress on this page all stay. Three things just need starting again:</p>
+      <ol>
+        <li>Open <strong>Docker Desktop</strong> and wait for it to finish starting</li>
+        <li>In VS Code, run <code>npm run dev</code> in one terminal</li>
+        <li>Run <code>npm run worker</code> in a second terminal</li>
+      </ol>
+      <p>Or just tell Claude: <em>"start everything back up."</em></p>
+      <p class="trap"><strong>While your machine is asleep, nothing sends.</strong> Comments still arrive on Instagram, but the DM never goes out and nobody is told. If this becomes something you rely on, ask Claude about moving it to a small always-on server.</p>
+    </div>
+  </section>
+</section>
+
+<section class="dfy">
+  <h2>Want this done for you instead?</h2>
+  <p>Not everybody wants to spend an afternoon inside Meta's dashboard. If you'd rather have it set up, running, and pointed at the way your business actually gets enquiries &mdash; that's what I do.</p>
+  <div class="dfy-actions">
+    <a class="btn btn-primary" href="https://wa.me/23054729515?text=Hi%20Rajeev%20%E2%80%94%20I%27d%20like%20BeyondChat%20set%20up%20for%20my%20business." target="_blank" rel="noopener">Book a time on WhatsApp</a>
+    <a class="btn btn-secondary" href="mailto:rajeev@rajeevkistoo.com?subject=BeyondChat%20setup">Email me</a>
+  </div>
+  <p class="dfy-sig">Rajeev Kistoo &middot; <a href="https://rajeevkistoo.com" target="_blank" rel="noopener">rajeevkistoo.com</a></p>
+</section>
+
+<footer>
+  <h2>If you get stuck</h2>
+  <p>Screenshot where you are and show it to Claude. Almost every problem here is one wrong screen in Meta's dashboard, and Claude will spot it in a picture far faster than you can describe it in words.</p>
+  <p>The full written guide, with every error message and what it actually means, is in <code>docs/setup.md</code>.</p>
+  <p><button class="reset" type="button" id="reset">Start over</button></p>
+</footer>
+
+</div>
+
+<div id="lightbox"><img alt=""></div>
+
+<script>
+(function () {
+  var KEY = "beyondchat.setup";
+  var steps = [].slice.call(document.querySelectorAll(".step[data-step]"));
+  var phases = [].slice.call(document.querySelectorAll("#phases .phase"));
+  var bar = document.getElementById("bar");
+  var doneCount = document.getElementById("done-count");
+  var label = document.getElementById("progress-label");
+  var donePanel = document.getElementById("done-panel");
+  document.getElementById("total-count").textContent = steps.length;
+
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+  function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
+
+  function phaseSteps(p) { return [].slice.call(p.querySelectorAll(".step[data-step]")); }
+  function phaseDone(p, state) {
+    return phaseSteps(p).every(function (st) { return !!state[st.dataset.step]; });
+  }
+
+  function render() {
+    var state = load(), done = 0;
+
+    steps.forEach(function (step) {
+      var isDone = !!state[step.dataset.step];
+      step.dataset.done = isDone ? "true" : "false";
+      if (isDone) done++;
+      var btn = step.querySelector(".tick");
+      if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+      btn.textContent = isDone ? "Undo" : btn.dataset.label;
+    });
+
+    // Exactly one phase is "current": the first with unfinished steps.
+    var currentFound = false;
+    phases.forEach(function (p) {
+      var complete = phaseDone(p, state);
+      var st;
+      if (complete) { st = "done"; }
+      else if (!currentFound) { st = "current"; currentFound = true; }
+      else { st = "upcoming"; }
+      p.dataset.state = st;
+      var badge = p.querySelector(".phase-status");
+      if (badge) {
+        var n = phaseSteps(p).filter(function (x) { return !!state[x.dataset.step]; }).length;
+        badge.textContent = complete ? "\u2713 done" : (n ? n + "/" + phaseSteps(p).length : "");
+      }
+    });
+
+    doneCount.textContent = done;
+    bar.style.width = (done / steps.length * 100) + "%";
+    bar.classList.toggle("done", done === steps.length);
+
+    var cur = phases.filter(function (p) { return p.dataset.state === "current"; })[0];
+    label.textContent = done === 0 ? "Start here"
+      : done === steps.length ? "Done \u2014 it's live"
+      : cur ? "Now: " + cur.querySelector("h2").textContent.replace(/^\d+\.\s*/, "") : "In progress";
+
+    donePanel.classList.toggle("on", done === steps.length);
+    document.getElementById("restart-phase").dataset.state = done === steps.length ? "current" : "upcoming";
+  }
+
+  function openOnly(step) {
+    steps.forEach(function (s) { s.dataset.open = "false"; });
+    if (step) step.dataset.open = "true";
+  }
+
+  steps.forEach(function (step) {
+    step.querySelector(".step-head").addEventListener("click", function () {
+      openOnly(step.dataset.open === "true" ? null : step);
+    });
+    step.querySelector(".tick").addEventListener("click", function () {
+      var state = load(), key = step.dataset.step;
+      if (state[key]) delete state[key]; else state[key] = true;
+      save(state); render();
+      if (state[key]) {
+        var next = steps.filter(function (s) { return !load()[s.dataset.step]; })[0];
+        openOnly(next);
+        if (next) next.scrollIntoView({ block: "center", behavior: "smooth" });
+        else donePanel.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    });
+  });
+
+  // Let people look ahead or back without losing where they are.
+  phases.forEach(function (p) {
+    var head = p.querySelector(".phase-head");
+    if (!head) return;
+    head.addEventListener("click", function () {
+      if (p.dataset.state === "current") return;
+      p.dataset.expanded = p.dataset.expanded === "true" ? "false" : "true";
+    });
+  });
+
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      navigator.clipboard.writeText(btn.parentNode.querySelector("code").textContent).then(function () {
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = "Copy"; }, 1200);
+      });
+    });
+  });
+
+  var lb = document.getElementById("lightbox"), lbImg = lb.querySelector("img");
+  document.addEventListener("click", function (e) {
+    var img = e.target.closest(".shot img");
+    if (img) { lbImg.src = img.src; lbImg.alt = img.alt; lb.classList.add("on"); }
+    else if (e.target.closest("#lightbox")) { lb.classList.remove("on"); }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") lb.classList.remove("on");
+  });
+
+  document.getElementById("reset").addEventListener("click", function () {
+    save({}); render(); openOnly(steps[0]);
+    phases.forEach(function (p) { p.dataset.expanded = "false"; });
+    window.scrollTo({ top: 0 });
+  });
+
+  render();
+  openOnly(steps.filter(function (s) { return !load()[s.dataset.step]; })[0]);
+})();
+</script>
+<div class="cta-bar">
+  <div class="cta-bar-inner">
+    <p>Would rather not do this yourself? I'll set it up for you.</p>
+    <a class="cta-link" href="https://wa.me/23054729515?text=Hi%20Rajeev%20%E2%80%94%20I%27d%20like%20BeyondChat%20set%20up%20for%20my%20business." target="_blank" rel="noopener">Book with Rajeev</a>
+    <a class="cta-alt" href="mailto:rajeev@rajeevkistoo.com?subject=BeyondChat%20setup">Email</a>
+  </div>
+</div>
+
+</body>
+</html>
