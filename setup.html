@@ -197,6 +197,54 @@ footer { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--bord
 footer h2 { font-size: .98rem; font-weight: 600; color: var(--foreground); margin: 0 0 .6rem; }
 footer p { margin: 0 0 .7rem; }
 .reset { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+
+/* Print / PDF.
+   The screen version deliberately hides everything you are not doing yet.
+   On paper that logic inverts: there is no "current phase", so every step has
+   to be open, and every control that only works with a mouse has to go. */
+@media print {
+  @page { margin: 16mm 14mm 18mm; }
+
+  .wrap { max-width: none; padding: 0; }
+  body { font-size: 10.5pt; }
+
+  /* Interactive-only chrome. None of this means anything on paper, and the
+     fixed CTA bar would otherwise print across the middle of every page. */
+  .cta-bar, .lightbox, .copy, .tick, .chev, .progress, .reset { display: none !important; }
+
+  /* On screen the celebration panel sits at the top, where you will see it the
+     moment you finish. Printed, that puts "That's it — it's live" on page one
+     above step one. Reorder it to the end; everything else keeps source order. */
+  .wrap { display: flex; flex-direction: column; }
+  .done-panel { order: 90; }
+  .dfy, footer { order: 91; }
+
+  /* Open everything, whatever localStorage last left it as. */
+  .phase[data-state] .phase-note,
+  .phase[data-state] .step,
+  .step .step-body,
+  .done-panel { display: block !important; }
+  .phase[data-state] { opacity: 1 !important; margin-bottom: 1.5rem !important; }
+  .phase-status { display: none !important; }
+
+  /* The tick box reads as a checkbox in print, which is what you want. */
+  .step-head { cursor: default; }
+  .box { color: var(--border) !important; }
+
+  /* Never split a step across a page — half an instruction is worse than none. */
+  .step, .callout, .trap, .shot, .dfy, .done-panel { break-inside: avoid; }
+  .phase-head, h2 { break-after: avoid; }
+  .step-body { padding-left: 1.4rem; }
+
+  pre { white-space: pre-wrap; word-break: break-word; border: 1px solid var(--border); }
+  a { color: inherit; text-decoration: none; }
+  /* Links are unclickable on paper, so spell the destination out. */
+  .step-body a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: .82em; color: var(--muted); word-break: break-all;
+  }
+  img { max-width: 100% !important; }
+}
 </style>
 </head>
 <body>
