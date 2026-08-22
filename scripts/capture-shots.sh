@@ -32,10 +32,10 @@ mkdir -p "$OUT"
 
 bold=$'\033[1m'; dim=$'\033[2m'; amber=$'\033[33m'; green=$'\033[32m'; off=$'\033[0m'
 
-# name|where to go|what to frame|warning|url to open (all optional after the first two)
+# name|where to go|what to frame|warning|url to open|mac app to bring forward
 SHOTS=(
-"vscode-claude|VS Code, with the Claude Code extension panel open on a project|The whole window: file tree on the left, Claude on the right||"
-"docker-running|Docker Desktop, Containers tab, with this project's containers running|The container list showing green/running||"
+"vscode-claude|VS Code, with the Claude Code extension panel open on a project|The whole window: file tree on the left, Claude on the right|||Visual Studio Code"
+"docker-running|Docker Desktop, Containers tab, with this project's containers running|The container list showing green/running|||Docker Desktop"
 "cf-nameservers|Cloudflare dashboard -> your domain -> the nameserver setup screen|The two nameservers Cloudflare gives you|Cover your account email if it is on screen|https://dash.cloudflare.com/"
 "cf-api-token|Cloudflare -> My Profile -> API Tokens -> Create Custom Token|The permissions rows: Cloudflare Tunnel Edit, DNS Edit, Zone Read|Frame the PERMISSIONS screen, never the screen that shows the token itself|https://dash.cloudflare.com/profile/api-tokens"
 "meta-create-app|developers.facebook.com -> Create App -> the use-case picker|The picker with Instagram selected|Use a throwaway app so no real app ID is shown|https://developers.facebook.com/apps/creation/"
@@ -56,14 +56,15 @@ echo
 echo "${bold}Capturing ${total} screenshots for setup.html${off}"
 echo "${dim}macOS will ask for Screen Recording permission the first time. If it"
 echo "does, grant it and run this again — without it every capture saves blank."
-echo "Enter = capture (drag a box, or press Space then click a window)"
+echo "Enter = capture. The right app is brought to the front for you first, so"
+echo "drag a box around it — or press Space and click it to grab the whole window."
 echo "s = skip · q = quit. Progress is saved as you go.${off}"
 echo
 
 i=0
 for row in "${SHOTS[@]}"; do
   i=$((i+1))
-  IFS='|' read -r name where what warn url <<< "$row"
+  IFS='|' read -r name where what warn url app <<< "$row"
   target="$OUT/$name.png"
 
   if [[ -f "$target" && "$REDO" != "--redo" ]]; then
@@ -100,6 +101,17 @@ for row in "${SHOTS[@]}"; do
     q|Q) echo "  Stopped. Run again to pick up where you left off."; break ;;
     s|S) echo "  ${dim}Skipped.${off}"; skipped+=("$name"); continue ;;
   esac
+
+  # Put the target in front before the crosshair appears. Without this the
+  # frontmost window is this terminal, so that is what gets captured — which is
+  # exactly what happened the first time this list was run.
+  if [[ -n "${app:-}" ]]; then
+    open -a "$app" 2>/dev/null || echo "  ${dim}Couldn't open \"$app\" — bring it up yourself.${off}"
+    sleep 1.5
+  elif [[ -n "${url:-}" ]]; then
+    open "$url" 2>/dev/null || true
+    sleep 1.5
+  fi
 
   # -i interactive selection, -o no window shadow (shadows look broken on white)
   screencapture -i -o "$target"
