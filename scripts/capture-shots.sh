@@ -30,12 +30,26 @@ fi
 
 mkdir -p "$OUT"
 
+# Bring an app to the front. Takes a comma-separated list of candidate names
+# because the same app answers to different ones: an app launched straight from
+# Downloads runs from a randomised AppTranslocation path where `open -a` cannot
+# find it, and shows up in the process list under its Electron name instead.
+activate_app() {
+  local candidates="$1" name
+  local IFS=,
+  for name in $candidates; do
+    open -a "$name" 2>/dev/null && return 0
+    osascript -e "tell application \"System Events\" to set frontmost of (first process whose name is \"$name\") to true" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 bold=$'\033[1m'; dim=$'\033[2m'; amber=$'\033[33m'; green=$'\033[32m'; off=$'\033[0m'
 
 # name|where to go|what to frame|warning|url to open|mac app to bring forward
 SHOTS=(
-"vscode-claude|VS Code, with the Claude Code extension panel open on a project|The whole window: file tree on the left, Claude on the right|||Visual Studio Code"
-"docker-running|Docker Desktop, Containers tab, with this project's containers running|The container list showing green/running|||Docker Desktop"
+"vscode-claude|VS Code, with the Claude Code extension panel open on a project|The whole window: file tree on the left, Claude on the right|||Visual Studio Code,Code,Electron"
+"docker-running|Docker Desktop, Containers tab, with this project's containers running|The container list showing green/running|||Docker Desktop,Docker"
 "cf-nameservers|Cloudflare dashboard -> your domain -> the nameserver setup screen|The two nameservers Cloudflare gives you|Cover your account email if it is on screen|https://dash.cloudflare.com/"
 "cf-api-token|Cloudflare -> My Profile -> API Tokens -> Create Custom Token|The permissions rows: Cloudflare Tunnel Edit, DNS Edit, Zone Read|Frame the PERMISSIONS screen, never the screen that shows the token itself|https://dash.cloudflare.com/profile/api-tokens"
 "meta-create-app|developers.facebook.com -> Create App -> the use-case picker|The picker with Instagram selected|Use a throwaway app so no real app ID is shown|https://developers.facebook.com/apps/creation/"
@@ -106,7 +120,7 @@ for row in "${SHOTS[@]}"; do
   # frontmost window is this terminal, so that is what gets captured — which is
   # exactly what happened the first time this list was run.
   if [[ -n "${app:-}" ]]; then
-    open -a "$app" 2>/dev/null || echo "  ${dim}Couldn't open \"$app\" — bring it up yourself.${off}"
+    activate_app "$app" || echo "  ${amber}Couldn't bring \"$app\" forward — switch to it yourself before you drag.${off}"
     sleep 1.5
   elif [[ -n "${url:-}" ]]; then
     open "$url" 2>/dev/null || true
