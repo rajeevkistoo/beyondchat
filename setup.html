@@ -440,21 +440,40 @@ npm run setup</code><button class="copy" type="button">Copy</button></pre>
     </div>
   </section>
 
-  <section class="step" data-step="p3-tunnel">
-    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Create the tunnel</span><span class="chev">▾</span></button>
+  <section class="step" data-step="p3-token">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Make Claude a Cloudflare key</span><span class="chev">▾</span></button>
     <div class="step-body">
-      <p>In Cloudflare: <strong>Zero Trust → Networks → Tunnels → Create a tunnel</strong>.</p>
+      <p>The tunnel itself is fiddly to build by hand — several screens, and one wrong box means it silently doesn't work. Claude can build the whole thing through Cloudflare's API instead. It just needs a key.</p>
       <ol>
-        <li>Name it anything</li>
-        <li>Copy the install command it shows you — Claude can run it</li>
-        <li>Add a public hostname: subdomain <code>dm</code>, your domain, service <code>http://localhost:3000</code></li>
+        <li>Go to <a href="https://dash.cloudflare.com/profile/api-tokens">API Tokens</a> → <strong>Create Token</strong> → <strong>Create Custom Token</strong></li>
+        <li>Give it these three permissions:
+          <ul>
+            <li>Account → <strong>Cloudflare Tunnel</strong> → Edit</li>
+            <li>Zone → <strong>DNS</strong> → Edit</li>
+            <li>Zone → <strong>Zone</strong> → Read</li>
+          </ul>
+        </li>
+        <li>Create it, and copy the token</li>
       </ol>
-      <p>Then visit <code>https://dm.yourdomain.com</code>. You should see the same app you saw on localhost.</p>
-      <p class="trap"><strong>Write your full address down now</strong> — <code>https://dm.yourdomain.com</code>. You'll paste it into Meta four separate times in the next phase, and it has to match exactly every time. No trailing slash.</p>
+      <p class="trap"><strong>Cloudflare shows the token once and never again.</strong> Paste it straight to Claude. If you lose it, delete that token and make another — there is no way to look it up.</p>
       <figure class="shot">
-        <img src="docs/img/cf-tunnel-hostname.png" alt="Adding the public hostname: subdomain dm, your domain, service http://localhost:3000" onerror="this.closest('figure').remove()">
-        <figcaption>Adding the public hostname: subdomain dm, your domain, service http://localhost:3000</figcaption>
+        <img src="docs/img/cf-api-token.png" alt="The custom token screen with the three permissions set" onerror="this.closest('figure').remove()">
+        <figcaption>The custom token screen with the three permissions set</figcaption>
       </figure>
+      <button class="tick" type="button">I have the token</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="p3-tunnel">
+    <button class="step-head" type="button"><span class="box">✓</span><span class="step-title">Ask Claude to build the tunnel</span><span class="chev">▾</span></button>
+    <div class="step-body">
+      <p>Paste this, with your own domain:</p>
+      <pre><code>Here is my Cloudflare API token: &lt;paste it&gt;
+My domain is yourdomain.com. Create a tunnel, point
+dm.yourdomain.com at http://localhost:3000, and start it.</code><button class="copy" type="button">Copy</button></pre>
+      <p>Claude creates the tunnel, adds the DNS record, and leaves it running. Then visit <code>https://dm.yourdomain.com</code> — you should see the same app you saw on localhost.</p>
+      <p class="trap"><strong>Write your full address down now</strong> — <code>https://dm.yourdomain.com</code>. You'll paste it into Meta four separate times in the next phase, and it has to match exactly every time. No trailing slash.</p>
+      <p class="trap"><strong>Delete the key when it's working.</strong> Back to <a href="https://dash.cloudflare.com/profile/api-tokens">API Tokens</a> and delete it. It has done its job, and it has been sitting in a chat log.</p>
       <button class="tick" type="button">My domain shows the app</button>
     </div>
   </section>

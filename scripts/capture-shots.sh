@@ -32,20 +32,20 @@ mkdir -p "$OUT"
 
 bold=$'\033[1m'; dim=$'\033[2m'; amber=$'\033[33m'; green=$'\033[32m'; off=$'\033[0m'
 
-# name|where to go|what to frame|warning (optional)
+# name|where to go|what to frame|warning|url to open (all optional after the first two)
 SHOTS=(
-"vscode-claude|VS Code, with the Claude Code extension panel open on a project|The whole window: file tree on the left, Claude on the right|"
-"docker-running|Docker Desktop, Containers tab, with this project's containers running|The container list showing green/running|"
-"cf-nameservers|Cloudflare dashboard → your domain → the nameserver setup screen|The two nameservers Cloudflare gives you|Cover your account email if it is on screen"
-"cf-tunnel-hostname|Cloudflare Zero Trust → Networks → Tunnels → your tunnel → Public Hostname|The filled-in form: subdomain, domain, service URL|Your tunnel token must NOT be visible"
-"meta-create-app|developers.facebook.com → Create App → the use-case picker|The picker with Instagram selected|Use a throwaway app so no real app ID is shown"
-"meta-oauth-redirect|Your Meta app → Instagram → API setup → OAuth redirect URIs|The redirect URI field with the callback URL in it|Crop out the app ID and any secret"
-"meta-webhook-config|Your Meta app → Instagram → Customize → Configure webhooks|The field list showing comments Subscribed|Crop out the verify token"
-"meta-tester-invite|Your Meta app → App roles → Roles → Instagram testers|The tester list with an invite showing|"
-"ig-tester-invite|YOUR PHONE: Instagram → Edit profile → Apps and websites → Tester invites|The Accept button. AirDrop it to the Mac first, then frame it here|"
-"meta-publish|Your Meta app → the left-hand menu, with Publish visible|The menu, so people can see where Publish lives|"
-"app-connect-instagram|Your BeyondChat → Settings → Connect Instagram → Instagram's approval screen|The permission list Instagram asks you to approve|"
-"dm-received|The payoff: the comment on your post, and the DM that arrived|Both together if you can. This is the best shot on the page|Blur the commenter's handle unless it is your own account"
+"vscode-claude|VS Code, with the Claude Code extension panel open on a project|The whole window: file tree on the left, Claude on the right||"
+"docker-running|Docker Desktop, Containers tab, with this project's containers running|The container list showing green/running||"
+"cf-nameservers|Cloudflare dashboard -> your domain -> the nameserver setup screen|The two nameservers Cloudflare gives you|Cover your account email if it is on screen|https://dash.cloudflare.com/"
+"cf-api-token|Cloudflare -> My Profile -> API Tokens -> Create Custom Token|The permissions rows: Cloudflare Tunnel Edit, DNS Edit, Zone Read|Frame the PERMISSIONS screen, never the screen that shows the token itself|https://dash.cloudflare.com/profile/api-tokens"
+"meta-create-app|developers.facebook.com -> Create App -> the use-case picker|The picker with Instagram selected|Use a throwaway app so no real app ID is shown|https://developers.facebook.com/apps/creation/"
+"meta-oauth-redirect|Your Meta app -> Instagram -> API setup -> OAuth redirect URIs|The redirect URI field with the callback URL in it|Crop out the app ID and any secret|https://developers.facebook.com/apps/"
+"meta-webhook-config|Your Meta app -> Instagram -> Customize -> Configure webhooks|The field list showing comments Subscribed|Crop out the verify token|https://developers.facebook.com/apps/"
+"meta-tester-invite|Your Meta app -> App roles -> Roles -> Instagram testers|The tester list with an invite showing||https://developers.facebook.com/apps/"
+"ig-tester-invite|YOUR PHONE: Instagram -> Edit profile -> Apps and websites -> Tester invites|The Accept button. AirDrop it to the Mac first, then frame it here||"
+"meta-publish|Your Meta app -> the left-hand menu, with Publish visible|The menu, so people can see where Publish lives||https://developers.facebook.com/apps/"
+"app-connect-instagram|Your BeyondChat -> Settings -> Connect Instagram -> Instagram's approval screen|The permission list Instagram asks you to approve||"
+"dm-received|The payoff: the comment on your post, and the DM that arrived|Both together if you can. This is the best shot on the page|Blur the commenter's handle unless it is your own account|"
 )
 
 total=${#SHOTS[@]}
@@ -63,7 +63,7 @@ echo
 i=0
 for row in "${SHOTS[@]}"; do
   i=$((i+1))
-  IFS='|' read -r name where what warn <<< "$row"
+  IFS='|' read -r name where what warn url <<< "$row"
   target="$OUT/$name.png"
 
   if [[ -f "$target" && "$REDO" != "--redo" ]]; then
@@ -77,6 +77,12 @@ for row in "${SHOTS[@]}"; do
   echo "  ${bold}Go to:${off} $where"
   echo "  ${bold}Frame:${off} $what"
   [[ -n "$warn" ]] && echo "  ${amber}⚠ $warn${off}"
+  # Open the page for you. Half the work in this list is finding the screen,
+  # not framing it — Meta in particular buries these four levels deep.
+  if [[ -n "${url:-}" ]]; then
+    echo "  ${dim}Opening $url${off}"
+    open "$url" 2>/dev/null || true
+  fi
   printf "  Ready? "
   # Read from the terminal when there is one, so this still works if the
   # script is piped. Unset on EOF would abort the run under `set -u`.

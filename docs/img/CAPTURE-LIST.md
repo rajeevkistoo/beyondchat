@@ -10,8 +10,8 @@ you work through the list.
 npm run shots
 ```
 
-It walks the list one at a time, tells you what to put on screen, and saves each
-capture under the right filename. Press Enter to capture, `s` to skip, `q` to
+It walks the list one at a time, opens the page in your browser, tells you what to
+put on screen, and saves each capture under the right filename. Press Enter to capture, `s` to skip, `q` to
 stop — already-captured shots are skipped, so you can do it over several sittings.
 `npm run shots -- --redo` recaptures everything.
 
@@ -30,7 +30,7 @@ not the whole 27-inch screen; these are read on a laptop at half width.
 | 1 | `vscode-claude.png` | VS Code with the Claude Code extension open on a project — file tree left, Claude right |
 | 2 | `docker-running.png` | Docker Desktop showing containers running, with the menu-bar whale visible if you can get both |
 | 3 | `cf-nameservers.png` | The Cloudflare screen listing the two nameservers to set at your registrar |
-| 4 | `cf-tunnel-hostname.png` | Zero Trust → Tunnels → the public hostname form, filled in: subdomain `dm`, service `http://localhost:3000` |
+| 4 | `cf-api-token.png` | Cloudflare → My Profile → API Tokens → Create Custom Token, showing the three permission rows. **The permissions screen, never the one that shows the token** |
 | 5 | `meta-create-app.png` | Meta's use-case picker with **Instagram** selected |
 | 6 | `meta-oauth-redirect.png` | The OAuth redirect URI field with a callback URL in it |
 | 7 | `meta-webhook-config.png` | Instagram use case → Customize → Configure webhooks, showing `comments` subscribed |
